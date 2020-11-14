@@ -11,11 +11,14 @@ def ip_checksum(msg):
     for i in range(0, len(msg) - 1, 2):
         w = ord(msg[i]) + (ord(msg[i+1]) << 8)
         s = carry_around_add(s, w)
-    return ~s & 0xffff
+    ret = str(~s & 0xffff)
+    while len(ret) < 5:
+        ret = "0" + ret
+    return ret
 
 
 def rdt_send(data, ack, sock, addr):
-	checksum = ip_checksum(str(data))
+	checksum = ip_checksum(data)
 	to_send = str(checksum) + str(ack) + data
 	sock.sendto(to_send.encode(), addr)
 
@@ -26,26 +29,40 @@ except socket.error:
 	print("Failed to create socket")
 	sys.exit()
 
+
+def allTrue(a):
+	for i in a:
+		if a[i] == False:
+			return False
+	return True
+
+
 host = 'localhost';
 port = 8888;
+window = 4
 
 inputs = [s]
 outputs = []
 
 timeout = 10
 ack_rcvd = [True, True, True, True]
-msg = ["", "", "", ""]
+msgs = ["one", "two", "three", "four"]
+
 
 while(1) :
-	if ack_rcvd:
-		msg[i] = input('Enter message to send : ')
-		
-		rdt_send(msg[i], i, inputs[0], (host, port))
+	if allTrue(ack_rcvd):
+		print("Enter " + str(window) + " messages ")
+		for i in range(0, window):
+			msgs[i] = input(": ")
+		print("Sending your data")
+		for i in range(0, window):
+			rdt_send(msgs[i], i, inputs[0], (host, port))
 	
 	readable, writable, exceptional = select.select( inputs, outputs, inputs, timeout)
 	
 	for tempSock in readable:
-		for i in ack_rcvd:
+		count = [False, False, False, False]
+		for i in range(0, window):
 			try:
 				d = tempSock.recvfrom(1024)
 				reply = d[0].decode()
@@ -55,17 +72,32 @@ while(1) :
 				ack = reply[5]
 				message = reply[6:]
 
+				current = int(ack)
+				if current > window:
+					break
+
 				calcSum = ip_checksum(message)
-				if int(calcSum) == int(checksum) and ack_seq == int(ack):
-					ack_rcvd[i] = True
-					print("Ack recieved")
-					# ack_seq[i] = 0 if int(ack) == 1 else 1
+				if int(calcSum) == int(checksum):
+					ack_rcvd[current] = True
+					count[current] = True
 				else:
-					print("Ack not recieved. Resending..")
-					rdt_send(msg[i], i, inputs[0], (host, port))
-					ack_rcvd[i] = False
+					ack_rcvd[current] = False
+
+			except socket.error as msg:
+				print("Error Code: " + str(msg[0]) + "Message " + msg[1].decode())
+				sys.exit()				
+
+	if not allTrue(count):
+		try: 
+			print("Ack not recieved. Resending..")
+			iput = input("enter")
+			for i in range(0, window):
+				rdt_send(msgs[i], i, inputs[0], (host, port))
+				ack_rcvd[i] = False
 		
 	
-			except socket.error as msg:
-					print ("Error Code : " + str(msg[0]) + " Message " + msg[1].decode())
-					sys.exit()
+		except socket.error as msg:
+				print ("Error Code : " + str(msg[0]) + " Message " + msg[1].decode())
+				sys.exit()
+	else:
+		print("all ACK's recieved to move on!")

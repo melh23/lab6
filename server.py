@@ -14,7 +14,10 @@ def ip_checksum(msg):
     for i in range(0, len(msg) - 1, 2):
         w = ord(msg[i]) + (ord(msg[i+1]) << 8)
         s = carry_around_add(s, w)
-    return ~s & 0xffff
+    ret = str(~s & 0xffff)
+    while len(ret) < 5:
+        ret = "0" + ret
+    return ret
 
 def rdt_send(data, ack, sock, addr):
 	checksum = ip_checksum(data)
